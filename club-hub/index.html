@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>勤益社團一站通｜互動式網頁設計期中專題</title>
+  <meta name="description" content="瀏覽社團、線上報名，並用本地端 AI 詢問社團資訊的互動式網頁。">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <!-- Vue 3 全域版（固定版本）。離線展示時可改成下載到本機的 vue.global.prod.js -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <a class="skip-link" href="#main">跳到主要內容</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top">勤益社團一站通</a>
+      <nav aria-label="主選單">
+        <ul class="nav-list">
+          <li><a href="#clubs">社團一覽</a></li>
+          <li><a href="#events">活動日程</a></li>
+          <li><a href="#signup">線上報名</a></li>
+          <li><a href="#assistant">AI 小幫手</a></li>
+          <li><a href="#about">專題說明</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="wrap">
+        <p class="eyebrow">互動式網頁設計｜期中專題</p>
+        <h1 id="hero-title">找到適合你的社團，<br>三分鐘完成報名</h1>
+        <p class="lead">瀏覽 {{ clubs.length }} 個社團、查看活動日程、線上填寫報名表，還能問本機執行的 AI 小幫手。</p>
+        <p><a class="btn" href="#clubs">開始瀏覽</a> <a class="btn btn--ghost" href="#assistant">問 AI 小幫手</a></p>
+      </div>
+    </section>
+
+    <!-- ========== 社團一覽：篩選 + 元件 ClubCard ========== -->
+    <section id="clubs" class="section" aria-labelledby="clubs-title">
+      <div class="wrap">
+        <h2 id="clubs-title">社團一覽</h2>
+        <p class="muted">以下為課堂專題的模擬資料，社團與活動皆為虛構。</p>
+
+        <form class="filters" role="search" aria-label="篩選社團" @submit.prevent>
+          <div class="field">
+            <label for="kw">關鍵字搜尋</label>
+            <input id="kw" type="search" v-model="keyword" placeholder="例如：攝影、新手、免費">
+          </div>
+          <div class="field">
+            <label for="cat">類別</label>
+            <select id="cat" v-model="category">
+              <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+            </select>
+          </div>
+          <div class="field field--check">
+            <input id="avail" type="checkbox" v-model="onlyAvailable">
+            <label for="avail">只看還有名額的社團</label>
+          </div>
+        </form>
+
+        <p class="result-count" role="status">共找到 {{ filteredClubs.length }} 個社團</p>
+
+        <div class="grid" v-if="filteredClubs.length">
+          <club-card v-for="c in filteredClubs" :key="c.id" :club="c"
+                     :selected="form.clubId === c.id" @select="selectClub"></club-card>
+        </div>
+        <p class="empty" v-else>找不到符合條件的社團，換個關鍵字或類別試試。</p>
+      </div>
+    </section>
+
+    <!-- ========== 活動日程：元件 EventItem ========== -->
+    <section id="events" class="section section--alt" aria-labelledby="events-title">
+      <div class="wrap">
+        <h2 id="events-title">活動日程</h2>
+        <ol class="events">
+          <event-item v-for="e in events" :key="e.id" :event="e"></event-item>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ========== 線上報名：表單 + 即時驗證 ========== -->
+    <section id="signup" class="section" aria-labelledby="signup-title">
+      <div class="wrap narrow">
+        <h2 id="signup-title">線上報名</h2>
+
+        <div v-if="result" class="notice notice--ok" role="status">
+          <h3>報名結果</h3>
+          <p>{{ result.status }}</p>
+          <dl class="meta">
+            <div><dt>受理編號</dt><dd>{{ result.no }}</dd></div>
+            <div><dt>姓名</dt><dd>{{ result.name }}</dd></div>
+            <div><dt>社團</dt><dd>{{ result.club }}</dd></div>
+          </dl>
+          <p class="muted">本頁為課堂原型，沒有後端，資料不會儲存；重新整理即回到初始畫面。</p>
+          <button type="button" class="btn btn--ghost" @click="resetForm">再報名一個</button>
+        </div>
+
+        <form v-else class="form" novalidate @submit.prevent="submitForm" aria-describedby="form-hint">
+          <p id="form-hint" class="muted">標示 <span class="req" aria-hidden="true">*</span> 的欄位為必填。</p>
+
+          <fieldset>
+            <legend>基本資料</legend>
+
+            <div class="field">
+              <label for="name">姓名 <span class="req" aria-hidden="true">*</span></label>
+              <input id="name" name="name" type="text" v-model="form.name" required autocomplete="name"
+                     :aria-invalid="!!msgOf('name')" aria-describedby="name-msg" @blur="touched.name = true">
+              <div id="name-msg"><field-message :msg="msgOf('name') || (okOf('name') ? '格式正確' : '')" :ok="okOf('name')"></field-message></div>
+            </div>
+
+            <div class="field">
+              <label for="sid">學號 <span class="req" aria-hidden="true">*</span></label>
+              <input id="sid" name="studentId" type="text" v-model="form.studentId" required maxlength="10"
+                     autocomplete="off" placeholder="例如 11513204"
+                     :aria-invalid="!!msgOf('studentId')" aria-describedby="sid-msg" @blur="touched.studentId = true">
+              <div id="sid-msg"><field-message :msg="msgOf('studentId') || (okOf('studentId') ? '格式正確' : '')" :ok="okOf('studentId')"></field-message></div>
+            </div>
+
+            <div class="field">
+              <label for="email">Email <span class="req" aria-hidden="true">*</span></label>
+              <input id="email" name="email" type="email" v-model="form.email" required autocomplete="email"
+                     inputmode="email" placeholder="name@example.com"
+                     :aria-invalid="!!msgOf('email')" aria-describedby="email-msg"
+                     @input="touched.email = true" @blur="touched.email = true">
+              <div id="email-msg"><field-message :msg="msgOf('email') || (okOf('email') ? 'Email 格式正確' : '')" :ok="okOf('email')"></field-message></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>報名社團</legend>
+            <div class="field">
+              <label for="club">選擇社團 <span class="req" aria-hidden="true">*</span></label>
+              <select id="club" name="club" v-model="form.clubId" required
+                      :aria-invalid="!!msgOf('clubId')" aria-describedby="club-msg" @change="touched.clubId = true" @blur="touched.clubId = true">
+                <option value="" disabled>請選擇…</option>
+                <option v-for="c in clubs" :key="c.id" :value="c.id">{{ c.name }}{{ c.seats === 0 ? '（額滿・候補）' : '' }}</option>
+              </select>
+              <div id="club-msg"><field-message :msg="msgOf('clubId')"></field-message></div>
+            </div>
+            <p class="summary" v-if="selectedClub">
+              預覽：<strong>{{ selectedClub.name }}</strong>｜{{ selectedClub.day }}｜{{ selectedClub.place }}｜社費 {{ selectedClub.fee === 0 ? '免費' : 'NT$ ' + selectedClub.fee }}
+            </p>
+          </fieldset>
+
+          <div class="field field--check">
+            <input id="agree" name="agree" type="checkbox" v-model="form.agree" required
+                   aria-describedby="agree-msg" @change="touched.agree = true">
+            <label for="agree">我同意社團為活動聯絡目的使用上述資料 <span class="req" aria-hidden="true">*</span></label>
+          </div>
+          <div id="agree-msg"><field-message :msg="msgOf('agree')"></field-message></div>
+
+          <button class="btn" type="submit">送出報名</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ========== 本地 AI 小幫手 ========== -->
+    <section id="assistant" class="section section--alt" aria-labelledby="ai-title">
+      <div class="wrap">
+        <h2 id="ai-title">AI 小幫手（本地端）</h2>
+        <p class="muted">此功能連到你自己電腦上的 LM Studio，問題不會送到雲端。需先載入模型、啟動 Server 並啟用 CORS。</p>
+
+        <div class="ai-layout">
+          <aside class="ai-settings" aria-label="連線設定">
+            <h3>連線設定</h3>
+            <div class="field">
+              <label for="base">Server 位址</label>
+              <input id="base" type="url" v-model="ai.baseUrl" placeholder="http://127.0.0.1:1234">
+            </div>
+            <div class="field">
+              <label for="token">API Token（沒有要求就留白）</label>
+              <input id="token" type="password" v-model="ai.token" autocomplete="off">
+            </div>
+            <button type="button" class="btn btn--small" :disabled="ai.busy" @click="loadModels">取得模型清單</button>
+            <div class="field">
+              <label for="model">模型</label>
+              <select id="model" v-model="ai.model" :disabled="!ai.models.length">
+                <option value="" disabled>請先取得模型清單</option>
+                <option v-for="m in ai.models" :key="m" :value="m">{{ m }}</option>
+              </select>
+            </div>
+            <p class="status" :class="'status--' + ai.statusType" role="status" aria-live="polite">{{ ai.status }}</p>
+            <details>
+              <summary>查看送給 AI 的 System Prompt</summary>
+              <pre class="prompt-box">{{ systemPrompt }}</pre>
+            </details>
+          </aside>
+
+          <div class="chat">
+            <div class="chat__log" ref="chatBox" aria-live="polite" aria-label="對話紀錄">
+              <chat-bubble v-for="(m, i) in chat" :key="i" :role="m.role" :text="m.text"></chat-bubble>
+            </div>
+            <ul class="quick" aria-label="快速提問">
+              <li v-for="q in quickQuestions" :key="q">
+                <button type="button" class="chip" :disabled="ai.busy" @click="sendQuestion(q)">{{ q }}</button>
+              </li>
+            </ul>
+            <form class="chat__form" @submit.prevent="sendQuestion()">
+              <label class="sr-only" for="q">輸入問題</label>
+              <input id="q" type="text" v-model="question" placeholder="輸入問題，例如：週五晚上有哪些社團？" :disabled="ai.busy">
+              <button class="btn" type="submit" :disabled="ai.busy">{{ ai.busy ? '處理中…' : '送出' }}</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 專題說明 ========== -->
+    <section id="about" class="section" aria-labelledby="about-title">
+      <div class="wrap narrow">
+        <h2 id="about-title">專題說明</h2>
+        <p>本專題對應期中考五個項目，詳細的需求拆解、Prompt 紀錄與迭代追問放在 <code>docs/</code> 資料夾。</p>
+        <table class="map">
+          <caption>期中考項目與專題對應</caption>
+          <thead><tr><th scope="col">項目</th><th scope="col">在本專題的位置</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">HTML、表單</th><td>語意標籤（header／nav／main／section／footer）、報名表單（fieldset／label／required／type=email）</td></tr>
+            <tr><th scope="row">CSS、RWD</th><td><code>assets/css/style.css</code>：CSS 變數、Grid 卡片牆、Flexbox 導覽列、<code>@media (max-width: 768px)</code></td></tr>
+            <tr><th scope="row">JavaScript、Vue</th><td><code>assets/js/app.js</code>：ref／computed／v-model／v-for、即時表單驗證、篩選</td></tr>
+            <tr><th scope="row">本地 AI 串接</th><td>「AI 小幫手」：LM Studio <code>/v1/chat/completions</code>、取得模型清單、120 秒逾時、錯誤恢復</td></tr>
+            <tr><th scope="row">提示工程、AI 協作、元件化</th><td><code>assets/js/components.js</code> 四個元件與 props；<code>docs/</code> 的需求拆解表與 Prompt 紀錄</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>互動式網頁設計期中專題｜模擬資料，僅供課堂展示。</p>
+    </div>
+  </footer>
+</div>
+
+<noscript><p style="padding:1rem">此頁面需要啟用 JavaScript 才能使用。</p></noscript>
+
+<script src="data/clubs.js"></script>
+<script src="assets/js/components.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
